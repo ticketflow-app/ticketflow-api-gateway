@@ -1,0 +1,72 @@
+services:
+  eureka-server:
+    build:
+      context: ../ticketflow-eureka-server
+      dockerfile: dockerfile
+    container_name: ticketflow-eureka-server
+    ports:
+      - "8761:8761"
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: ticketflow-user-db
+    environment:
+      POSTGRES_DB: TicketFlow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  user-service:
+    build:
+      context: ../ticketflow-user-service
+      dockerfile: dockerfile
+    container_name: ticketflow-user-service
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/TicketFlow
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: admin
+      JWT_SECRET: ticketflow-dev-secret-key-change-me-in-production-2026
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
+    ports:
+      - "8081:8081"
+    depends_on:
+      eureka-server:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: ticketflow-redis
+    ports:
+      - "6379:6379"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: dockerfile
+    container_name: ticketflow-api-gateway
+    environment:
+      SERVER_PORT: 8080
+      EUREKA_URI: http://eureka-server:8761/eureka
+      EUREKA_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JWT_SECRET: ticketflow-dev-secret-key-change-me-in-production-2026
+    ports:
+      - "8080:8080"
+    depends_on:
+      eureka-server:
+        condition: service_started
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:

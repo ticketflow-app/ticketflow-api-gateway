@@ -1,0 +1,125 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      server:
+        webflux:
+          # CORS: el frontend (http://localhost:8081) llama al gateway (http://localhost:8080)
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowed-origins:
+                  - "http://localhost:8081"
+                allowed-methods:
+                  - GET
+                  - POST
+                  - PUT
+                  - PATCH
+                  - DELETE
+                  - OPTIONS
+                allowed-headers:
+                  - Authorization
+                  - Content-Type
+                allow-credentials: true
+          x-forwarded:
+            enabled: true
+          routes:
+            # Ruta hacia el microservicio de Usuarios
+            - id: user-service
+              # lb:// = resuelto vía Eureka; se puede forzar una URL directa con USER_SERVICE_URI (dev sin Eureka)
+              uri: ${USER_SERVICE_URI:lb://ticketflow-user-service}
+              predicates:
+                - Path=/register,/login,/me,/users/**
+              filters:
+                # 1. Circuit Breaker
+                - name: CircuitBreaker
+                  args:
+                    name: userCircuitBreaker
+                    fallbackUri: forward:/fallback/users
+                # 2. Rate Limiter (Redis) - protege contra abuso
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 10 # Peticiones por segundo permitidas
+                    redis-rate-limiter.burstCapacity: 20 # Ráfaga máxima permitida
+                    redis-rate-limiter.requestedTokens: 1
+
+            # Ruta hacia el microservicio de Tiquetes (aún no implementado - placeholder)
+            - id: ticket-service
+              uri: ${TICKET_SERVICE_URI:lb://ticketflow-ticket-service} # Aquí irá la IP/URL de tu microservicio real
+              predicates:
+                - Path=/api/tickets/**
+              filters:
+                # 1. Circuit Breaker
+                - name: CircuitBreaker
+                  args:
+                    name: ticketCircuitBreaker
+                    fallbackUri: forward:/fallback/tickets
+                # 2. Rate Limiter (Redis)
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+
+  # Configuración de conexión a Redis (para el Rate Limiter)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+# Descubrimiento de servicios: el gateway es un cliente de Eureka
+eureka:
+  client:
+    # Desactivar en dev local si aún no hay eureka-server (EUREKA_ENABLED=false)
+    enabled: ${EUREKA_ENABLED:true}
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka}
+  instance:
+    hostname: ${EUREKA_INSTANCE_HOSTNAME:localhost}
+    prefer-ip-address: true
+
+# Configuración de resiliencia (Circuit Breaker + timeouts)
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      userCircuitBreaker:
+        base-config: default
+      ticketCircuitBreaker:
+        base-config: default
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 3s
+    instances:
+      userCircuitBreaker:
+        base-config: default
+      ticketCircuitBreaker:
+        base-config: default
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+  endpoint:
+    gateway:
+      access: read-only
+
+# Secreto compartido con user-service para validar el JWT (debe coincidir con jwt.secret de user-service)
+jwt:
+  secret: ${JWT_SECRET:ticketflow-dev-secret-key-change-me-in-production-2026}
