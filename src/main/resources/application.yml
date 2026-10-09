@@ -68,6 +68,26 @@ spring:
                     redis-rate-limiter.burstCapacity: 20
                     redis-rate-limiter.requestedTokens: 1
 
+            # Ruta hacia el microservicio de Inventario (reservas y disponibilidad)
+            - id: inventory-service
+              # lb:// = resuelto vía Eureka; se puede forzar una URL directa con INVENTORY_SERVICE_URI (dev sin Eureka)
+              uri: ${INVENTORY_SERVICE_URI:lb://ticketflow-inventory-service}
+              predicates:
+                - Path=/events/*/availability,/reservations,/reservations/**
+              filters:
+                # 1. Circuit Breaker
+                - name: CircuitBreaker
+                  args:
+                    name: inventoryCircuitBreaker
+                    fallbackUri: forward:/fallback/inventory
+                # 2. Rate Limiter (Redis)
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+
   # Configuración de conexión a Redis (para el Rate Limiter)
   data:
     redis:
@@ -101,6 +121,8 @@ resilience4j:
         base-config: default
       ticketCircuitBreaker:
         base-config: default
+      inventoryCircuitBreaker:
+        base-config: default
   timelimiter:
     configs:
       default:
@@ -109,6 +131,8 @@ resilience4j:
       userCircuitBreaker:
         base-config: default
       ticketCircuitBreaker:
+        base-config: default
+      inventoryCircuitBreaker:
         base-config: default
 
 management:

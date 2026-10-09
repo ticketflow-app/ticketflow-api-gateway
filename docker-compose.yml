@@ -7,15 +7,30 @@ services:
     ports:
       - "8761:8761"
 
-  postgres:
+  postgres-user:
     image: postgres:18-alpine
     container_name: ticketflow-user-db
     environment:
-      POSTGRES_DB: TicketFlow
+      POSTGRES_DB: user
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_user_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-inventory:
+    image: postgres:18-alpine
+    container_name: ticketflow-inventory-db
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - postgres_inventory_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -29,7 +44,7 @@ services:
     container_name: ticketflow-user-service
     environment:
       SERVER_PORT: 8081
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/TicketFlow
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-user:5432/user
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: admin
       JWT_SECRET: ticketflow-dev-secret-key-change-me-in-production-2026
@@ -39,7 +54,7 @@ services:
     depends_on:
       eureka-server:
         condition: service_started
-      postgres:
+      postgres-user:
         condition: service_healthy
 
   redis:
@@ -47,6 +62,52 @@ services:
     container_name: ticketflow-redis
     ports:
       - "6379:6379"
+
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: ticketflow-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  inventory-service:
+    build:
+      context: ../ticketflow-inventory-service
+      dockerfile: dockerfile
+    container_name: ticketflow-inventory-service
+    environment:
+      SERVER_PORT: 8082
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres-inventory:5432/inventory
+      SPRING_R2DBC_USERNAME: postgres
+      SPRING_R2DBC_PASSWORD: admin
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres-inventory:5432/inventory
+      SPRING_FLYWAY_USER: postgres
+      SPRING_FLYWAY_PASSWORD: admin
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
+      EUREKA_ENABLED: "true"
+    ports:
+      - "8082:8082"
+    depends_on:
+      eureka-server:
+        condition: service_started
+      postgres-inventory:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
 
   api-gateway:
     build:
@@ -69,4 +130,5 @@ services:
         condition: service_started
 
 volumes:
-  postgres_data:
+  postgres_user_data:
+  postgres_inventory_data:

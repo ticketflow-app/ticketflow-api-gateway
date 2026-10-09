@@ -21,6 +21,11 @@ public class FallbackController {
 		return fallback("ticket-service");
 	}
 
+	@GetMapping("/fallback/inventory")
+	public ResponseEntity<Map<String, Object>> inventoryFallback() {
+		return fallback("inventory-service");
+	}
+
 	private ResponseEntity<Map<String, Object>> fallback(String service) {
 		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
 				.body(Map.of(
