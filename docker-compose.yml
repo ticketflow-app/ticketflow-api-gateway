@@ -86,12 +86,9 @@ services:
     container_name: ticketflow-inventory-service
     environment:
       SERVER_PORT: 8082
-      SPRING_R2DBC_URL: r2dbc:postgresql://postgres-inventory:5432/inventory
-      SPRING_R2DBC_USERNAME: postgres
-      SPRING_R2DBC_PASSWORD: admin
-      SPRING_FLYWAY_URL: jdbc:postgresql://postgres-inventory:5432/inventory
-      SPRING_FLYWAY_USER: postgres
-      SPRING_FLYWAY_PASSWORD: admin
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/inventory
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: admin
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092

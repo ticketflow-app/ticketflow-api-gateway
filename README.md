@@ -38,13 +38,13 @@ Requiere **Redis** corriendo en `localhost:6379` para el rate limiter (si no, co
 | Ruta del gateway | Microservicio destino | Endpoints |
 |---|---|---|
 | `/register`, `/login`, `/me`, `/users/**` | `user-service` (`localhost:8081`) | registrarse, login, datos del token, cambio de rol |
-| `/api/tickets/**` | `ticket-service` (placeholder, aún no implementado) | — |
+| `/events/*/availability`, `/reservations`, `/reservations/**` | `inventory-service` (`localhost:8082`) | disponibilidad por evento y reservas |
 
-Cada ruta tiene Circuit Breaker con fallback (`/fallback/users`, `/fallback/tickets`) que responde `503` degradado cuando el servicio destino no responde, y rate limiter por IP (10 req/s, ráfaga de 20). Un filtro global valida el JWT (`Authorization: Bearer <token>`) en todas las rutas salvo `/register`, `/login`, `/actuator/**` y los preflight `OPTIONS`.
+Cada ruta tiene Circuit Breaker con fallback (`/fallback/users`, `/fallback/inventory`) que responde `503` degradado cuando el servicio destino no responde, y rate limiter por IP (10 req/s, ráfaga de 20). Un filtro global valida el JWT (`Authorization: Bearer <token>`) en todas las rutas salvo `/register`, `/login`, `/actuator/**` y los preflight `OPTIONS`.
 
 ## Configuración por variables de entorno
 
-- `USER_SERVICE_URI` / `TICKET_SERVICE_URI`: fuerza una URL directa (`http://...`) para dev sin Eureka; si no se define, se usa `lb://<service>` resuelto vía Eureka.
+- `USER_SERVICE_URI` / `INVENTORY_SERVICE_URI`: fuerza una URL directa (`http://...`) para dev sin Eureka; si no se define, se usa `lb://<service>` resuelto vía Eureka.
 - `EUREKA_URI`: defaultZone de Eureka (default `http://localhost:8761/eureka`).
 - `EUREKA_ENABLED`: `false` desactiva el cliente Eureka (dev local sin eureka-server).
 - `REDIS_HOST` / `REDIS_PORT`: conexión a Redis.
