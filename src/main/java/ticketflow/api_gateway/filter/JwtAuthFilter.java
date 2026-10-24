@@ -21,7 +21,7 @@ import java.util.List;
 @Component
 public class JwtAuthFilter implements GlobalFilter, Ordered {
 
-	private static final List<String> RUTAS_PUBLICAS = List.of("/register", "/login", "/actuator");
+	private static final List<String> RUTAS_PUBLICAS = List.of("/api/auth/register", "/api/auth/login", "/register", "/login", "/actuator");
 
 	private final SecretKey secretKey;
 

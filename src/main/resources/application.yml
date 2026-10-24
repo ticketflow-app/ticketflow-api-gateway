@@ -34,7 +34,7 @@ spring:
               # lb:// = resuelto vía Eureka; se puede forzar una URL directa con USER_SERVICE_URI (dev sin Eureka)
               uri: ${USER_SERVICE_URI:lb://ticketflow-user-service}
               predicates:
-                - Path=/register,/login,/me,/users/**
+                - Path=/api/auth/**,/api/usuarios/**,/register,/login,/me,/users/**
               filters:
                 # 1. Circuit Breaker
                 - name: CircuitBreaker
@@ -54,8 +54,11 @@ spring:
               # lb:// = resuelto vía Eureka; se puede forzar una URL directa con INVENTORY_SERVICE_URI (dev sin Eureka)
               uri: ${INVENTORY_SERVICE_URI:lb://ticketflow-inventory-service}
               predicates:
-                - Path=/events/*/availability,/reservations,/reservations/**
+                - Path=/api/inventario/**,/api/reservas/**,/api/boletos/**,/events/*/availability,/reservations,/reservations/**
               filters:
+                - RewritePath=/api/inventario/eventos/(?<segment>.*), /events/${segment}
+                - RewritePath=/api/reservas/(?<segment>.*), /reservations${segment}
+                - RewritePath=/api/boletos/(?<segment>.*), /boletos/${segment}
                 # 1. Circuit Breaker
                 - name: CircuitBreaker
                   args:
