@@ -34,7 +34,7 @@ spring:
               # lb:// = resuelto vía Eureka; se puede forzar una URL directa con USER_SERVICE_URI (dev sin Eureka)
               uri: ${USER_SERVICE_URI:lb://ticketflow-user-service}
               predicates:
-                - Path=/api/auth/**,/api/usuarios/**,/register,/login,/me,/users/**
+                - Path=/api/auth/**,/api/usuarios,/api/usuarios/**,/register,/login,/me,/users/**
               filters:
                 # 1. Circuit Breaker
                 - name: CircuitBreaker
@@ -54,9 +54,10 @@ spring:
               # lb:// = resuelto vía Eureka; se puede forzar una URL directa con INVENTORY_SERVICE_URI (dev sin Eureka)
               uri: ${INVENTORY_SERVICE_URI:lb://ticketflow-inventory-service}
               predicates:
-                - Path=/api/inventario/**,/api/reservas/**,/api/boletos/**,/events/*/availability,/reservations,/reservations/**
+                - Path=/api/inventario/**,/api/reservas,/api/reservas/**,/api/boletos/**,/events/*/availability,/reservations,/reservations/**
               filters:
-                - RewritePath=/api/inventario/eventos/(?<segment>.*), /events/${segment}
+                - RewritePath=/api/inventario/eventos/(?<eventId>[^/]+)/disponibilidad, /events/${eventId}/availability
+                - RewritePath=/api/reservas, /reservations
                 - RewritePath=/api/reservas/(?<segment>.*), /reservations${segment}
                 - RewritePath=/api/boletos/(?<segment>.*), /boletos/${segment}
                 # 1. Circuit Breaker
@@ -70,6 +71,25 @@ spring:
                     key-resolver: "#{@ipKeyResolver}"
                     redis-rate-limiter.replenishRate: 10
                     redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+
+            # Ruta hacia el microservicio de Catálogo (eventos, recintos, localidades)
+            - id: catalog-service
+              uri: ${CATALOG_SERVICE_URI:lb://ticketflow-catalog-service}
+              predicates:
+                - Path=/api/eventos/**,/api/eventos,/api/recintos/**,/api/localidades/**,/api/organizador/**
+              filters:
+                # 1. Circuit Breaker
+                - name: CircuitBreaker
+                  args:
+                    name: catalogCircuitBreaker
+                    fallbackUri: forward:/fallback/catalog
+                # 2. Rate Limiter (Redis) — 50/s en lecturas de catálogo
+                - name: RequestRateLimiter
+                  args:
+                    key-resolver: "#{@ipKeyResolver}"
+                    redis-rate-limiter.replenishRate: 50
+                    redis-rate-limiter.burstCapacity: 100
                     redis-rate-limiter.requestedTokens: 1
 
   # Configuración de conexión a Redis (para el Rate Limiter)
@@ -105,6 +125,8 @@ resilience4j:
         base-config: default
       inventoryCircuitBreaker:
         base-config: default
+      catalogCircuitBreaker:
+        base-config: default
   timelimiter:
     configs:
       default:
@@ -113,6 +135,8 @@ resilience4j:
       userCircuitBreaker:
         base-config: default
       inventoryCircuitBreaker:
+        base-config: default
+      catalogCircuitBreaker:
         base-config: default
 
 management:

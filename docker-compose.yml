@@ -37,6 +37,21 @@ services:
       timeout: 5s
       retries: 5
 
+  postgres-catalog:
+    image: postgres:18-alpine
+    container_name: ticketflow-catalog-db
+    environment:
+      POSTGRES_DB: catalog
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    volumes:
+      - postgres_catalog_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d catalog"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   user-service:
     build:
       context: ../ticketflow-user-service
@@ -79,6 +94,40 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
+  localstack:
+    image: localstack/localstack:3
+    container_name: ticketflow-localstack
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4566/_localstack/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  localstack-init:
+    image: amazon/aws-cli:2.17.0
+    container_name: ticketflow-localstack-init
+    depends_on:
+      localstack:
+        condition: service_started
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until aws --endpoint-url=http://localstack:4566 s3api list-buckets >/dev/null 2>&1; do sleep 1; done
+        aws --endpoint-url=http://localstack:4566 s3 mb s3://boletos-imagenes || true
+        aws --endpoint-url=http://localstack:4566 s3api put-bucket-cors \
+          --bucket boletos-imagenes \
+          --cors-configuration '{"CORSRules":[{"AllowedOrigins":["*"],"AllowedMethods":["PUT","GET","HEAD"],"AllowedHeaders":["*"]}]}' || true
+
   inventory-service:
     build:
       context: ../ticketflow-inventory-service
@@ -86,9 +135,13 @@ services:
     container_name: ticketflow-inventory-service
     environment:
       SERVER_PORT: 8082
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-inventory:5432/inventory
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: admin
+      # inventory-service uses R2DBC for the application and JDBC for Flyway.
+      SPRING_R2DBC_URL: r2dbc:postgresql://postgres-inventory:5432/inventory
+      SPRING_R2DBC_USERNAME: postgres
+      SPRING_R2DBC_PASSWORD: admin
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres-inventory:5432/inventory
+      SPRING_FLYWAY_USER: postgres
+      SPRING_FLYWAY_PASSWORD: admin
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -100,6 +153,44 @@ services:
       eureka-server:
         condition: service_started
       postgres-inventory:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  catalog-service:
+    build:
+      context: ../ticketflow-catalog-service
+      dockerfile: dockerfile
+    container_name: ticketflow-catalog-service
+    environment:
+      SERVER_PORT: 8082
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-catalog:5432/catalog
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: admin
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      KAFKA_BOOTSTRAP: kafka:9092
+      ELASTICSEARCH_ENABLED: "false"
+      JWT_SECRET: ticketflow-dev-secret-key-change-me-in-production-2026
+      # Presigned URLs are signed locally, so the browser-facing endpoint uses localhost.
+      S3_BUCKET: boletos-imagenes
+      AWS_REGION: us-east-1
+      S3_ENDPOINT: http://localhost:4566
+      IMAGES_PUBLIC_BASE_URL: http://localhost:4566/boletos-imagenes
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      DEMO_DATA_ENABLED: "true"
+      EUREKA_ENABLED: "true"
+      EUREKA_DEFAULT_ZONE: http://eureka-server:8761/eureka
+      EUREKA_INSTANCE_HOSTNAME: catalog-service
+    # No host port: inventory-service already publishes 8082; the gateway
+    # reaches the catalog through Eureka inside the Docker network.
+    depends_on:
+      eureka-server:
+        condition: service_started
+      postgres-catalog:
         condition: service_healthy
       redis:
         condition: service_started
@@ -129,3 +220,4 @@ services:
 volumes:
   postgres_user_data:
   postgres_inventory_data:
+  postgres_catalog_data:

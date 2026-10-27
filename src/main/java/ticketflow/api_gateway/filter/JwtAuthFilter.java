@@ -21,7 +21,8 @@ import java.util.List;
 @Component
 public class JwtAuthFilter implements GlobalFilter, Ordered {
 
-	private static final List<String> RUTAS_PUBLICAS = List.of("/api/auth/register", "/api/auth/login", "/register", "/login", "/actuator");
+	private static final List<String> RUTAS_PUBLICAS = List.of("/api/auth/register", "/api/auth/login", "/api/auth/refresh",
+			"/register", "/login", "/actuator");
 
 	private final SecretKey secretKey;
 
@@ -34,7 +35,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 		String path = exchange.getRequest().getURI().getPath();
 		HttpMethod method = exchange.getRequest().getMethod();
 
-		if (esRutaPublica(path) || HttpMethod.OPTIONS.equals(method)) {
+		if (esRutaPublica(path) || esLecturaPublicaDelCatalogo(path, method)
+				|| esLecturaPublicaDelInventario(path, method) || HttpMethod.OPTIONS.equals(method)) {
 			return chain.filter(exchange);
 		}
 
@@ -53,6 +55,18 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 
 	private boolean esRutaPublica(String path) {
 		return RUTAS_PUBLICAS.stream().anyMatch(path::startsWith);
+	}
+
+	private boolean esLecturaPublicaDelCatalogo(String path, HttpMethod method) {
+		return HttpMethod.GET.equals(method)
+				&& (path.startsWith("/api/eventos") || path.startsWith("/api/recintos"))
+				&& !path.endsWith("/imagen-upload-url");
+	}
+
+	private boolean esLecturaPublicaDelInventario(String path, HttpMethod method) {
+		return HttpMethod.GET.equals(method)
+				&& (path.matches("^/events/[^/]+/availability$")
+						|| path.matches("^/api/inventario/eventos/[^/]+/disponibilidad$"));
 	}
 
 	private Mono<Void> noAutorizado(ServerWebExchange exchange) {
