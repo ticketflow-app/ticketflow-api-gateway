@@ -66,7 +66,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
 	private boolean esLecturaPublicaDelInventario(String path, HttpMethod method) {
 		return HttpMethod.GET.equals(method)
 				&& (path.matches("^/events/[^/]+/availability$")
-						|| path.matches("^/api/inventario/eventos/[^/]+/disponibilidad$"));
+						|| path.matches("^/eventos/[^/]+/disponibilidad$"));
 	}
 
 	private Mono<Void> noAutorizado(ServerWebExchange exchange) {
