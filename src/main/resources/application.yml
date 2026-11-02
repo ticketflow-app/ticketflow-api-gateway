@@ -54,12 +54,9 @@ spring:
               # lb:// = resuelto vía Eureka; se puede forzar una URL directa con INVENTORY_SERVICE_URI (dev sin Eureka)
               uri: ${INVENTORY_SERVICE_URI:lb://ticketflow-inventory-service}
               predicates:
-                - Path=/api/inventario/**,/api/reservas,/api/reservas/**,/api/boletos/**,/events/*/availability,/reservations,/reservations/**
+                - Path=/api/inventario/**,/api/reservas,/api/reservas/**,/api/boletos/**
               filters:
-                - RewritePath=/api/inventario/eventos/(?<eventId>[^/]+)/disponibilidad, /events/${eventId}/availability
-                - RewritePath=/api/reservas, /reservations
-                - RewritePath=/api/reservas/(?<segment>.*), /reservations${segment}
-                - RewritePath=/api/boletos/(?<segment>.*), /boletos/${segment}
+                # Las rutas /api/... las sirve el propio inventory-service: no hay RewritePath.
                 # 1. Circuit Breaker
                 - name: CircuitBreaker
                   args:
